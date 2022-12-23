@@ -2,8 +2,6 @@
 // solhint-disable not-rely-on-time
 pragma solidity ^0.8.0;
 
-import "forge-std/console.sol";
-
 import { IFlowScheduler } from "./interface/IFlowScheduler.sol";
 import {
     ISuperToken
@@ -33,11 +31,6 @@ contract SchedulerGelatoResolver {
             sender, 
             receiver
         );
-
-        // console.log(block.timestamp);             // 1 
-        // console.log(flowSchedule.startDate);      // 2
-        // console.log(flowSchedule.endDate);        // 3602
-        // console.log(flowSchedule.startMaxDelay);  // 60
 
         if (flowSchedule.endDate != 0 && block.timestamp >= flowSchedule.endDate) {
 
@@ -75,6 +68,7 @@ contract SchedulerGelatoResolver {
 
         } else {
 
+            // return canExec as false and non-executable payload
             return (
                 false,
                 "0x"

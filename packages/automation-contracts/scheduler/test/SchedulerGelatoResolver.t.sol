@@ -11,8 +11,6 @@ import { SchedulerGelatoResolver } from "./../contracts/SchedulerGelatoResolver.
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC1820Registry } from "@openzeppelin/contracts/utils/introspection/IERC1820Registry.sol";
 
-import "forge-std/console.sol";
-
 
 /// @title Example Super Token Test
 /// @author ctle-vn, SuperfluidTester taken from jtriley.eth
