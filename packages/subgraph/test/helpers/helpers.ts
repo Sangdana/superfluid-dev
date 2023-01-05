@@ -1,25 +1,21 @@
+import fs from "fs";
 import { ethers } from "hardhat";
 import { TransactionResponse } from "@ethersproject/providers";
-import { request, gql } from "graphql-request";
-import { Framework, WrapperSuperToken } from "@superfluid-finance/sdk-core";
+import { gql, request } from "graphql-request";
+import { Framework, TestToken } from "@superfluid-finance/sdk-core";
 import {
-    IMeta,
     IIndexSubscription,
-    ITestUpdateFlowOperatorData,
-    ITestModifyFlowData,
+    IMeta,
     ISubgraphErrors,
+    ITestModifyFlowData,
+    ITestUpdateFlowOperatorData,
 } from "../interfaces";
 import { FlowActionType } from "./constants";
 import TestTokenABI from "../../abis/TestToken.json";
-import { TestToken } from "../../typechain";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { BigNumber } from "ethers";
-
-// the resolver address should be consistent as long as you use the
-// first account retrieved by hardhat's ethers.getSigners():
-// 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266 and the nonce is 0
-const RESOLVER_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
-
+const ORDER_MULTIPLIER = 10000; // This number is also defined as ORDER_MULTIPLIER in packages/subgraph/src/utils.ts
+const MAX_SAFE_SECONDS = BigNumber.from("8640000000000"); // This number is also defined as MAX_SAFE_SECONDS in packages/subgraph/src/utils.ts
 /**************************************************************************
  * Test Helper Functions
  *************************************************************************/
@@ -36,27 +32,30 @@ export const beforeSetup = async (tokenAmount: number) => {
         (x, y) => ({ ...x, [y.address]: y }),
         {}
     );
+    const readFromDir = __dirname.split("test")[0] + "config/ganache.json";
+    const rawData = fs.readFileSync(readFromDir);
+    const frameworkAddresses = JSON.parse(rawData.toString());
+
     const users = signers.map((x) => x.address);
     let totalSupply = 0;
-    // names[Bob] = "Bob";
+    const chainId = (await Deployer.provider!.getNetwork()).chainId;
     const sf = await Framework.create({
-        networkName: "custom",
-        dataMode: "WEB3_ONLY",
+        chainId,
         protocolReleaseVersion: "test",
         provider: Deployer.provider!,
-        resolverAddress: RESOLVER_ADDRESS,
+        resolverAddress: frameworkAddresses.resolverV1Address,
     });
 
     const resolver = sf.contracts.resolver.connect(Deployer);
 
     console.log("\n");
-    const fDAIx = (await sf.loadSuperToken("fDAIx")) as WrapperSuperToken;
+    const fDAIx = await sf.loadWrapperSuperToken("fDAIx");
 
     // types not properly handling this case
     const fDAI = new ethers.Contract(
-        fDAIx.underlyingToken!.address,
+        fDAIx.underlyingToken.address,
         TestTokenABI
-    ) as TestToken;
+    ) as unknown as TestToken;
 
     console.log(
         "Mint fDAI, approve fDAIx allowance and upgrade fDAI to fDAIx for users..."
@@ -300,9 +299,9 @@ export const modifyFlowAndReturnCreatedFlowData = async (
         [FlowActionType.Delete, "Delete"],
     ]);
     console.log(
-        `********************** ${actionToTypeStringMap.get(
-            data.actionType
-        )} a flow **********************`
+        `${actionToTypeStringMap.get(data.actionType)} flow from ${
+            data.sender
+        } to ${data.receiver} at ${data.newFlowRate}`
     );
 
     let signer = data.liquidator
@@ -310,6 +309,7 @@ export const modifyFlowAndReturnCreatedFlowData = async (
         : await ethers.getSigner(data.sender);
     const baseData = {
         superToken: data.superToken.address,
+        sender: data.sender,
         receiver: data.receiver,
         userData: "0x",
     };
@@ -371,19 +371,24 @@ export const modifyFlowAndReturnCreatedFlowData = async (
     const block = await data.provider.getBlock(txnResponse.blockNumber);
     const timestamp = block.timestamp;
     await waitUntilBlockIndexed(txnResponse.blockNumber);
-
+    const transactionReceipt = await txnResponse.wait();
+    const methodFilter = data.framework.cfaV1.contract.filters.FlowUpdated();
+    const methodSignature = methodFilter?.topics?.pop();
+    const transactionLog = transactionReceipt.logs.find(
+        (log) => log.topics[0] === methodSignature
+    );
     const { flowRate, deposit } = await data.framework.cfaV1.getFlow({
         superToken: data.superToken.address,
         sender: data.sender,
         receiver: data.receiver,
         providerOrSigner: data.provider,
     });
-
     return {
         txnResponse,
         timestamp,
         flowRate: toBN(flowRate),
         deposit,
+        logIndex: transactionLog?.logIndex,
     };
 };
 
@@ -426,7 +431,14 @@ export const updateFlowOperatorPermissions = async (
     const block = await data.provider.getBlock(txnResponse.blockNumber);
     const timestamp = block.timestamp;
     await waitUntilBlockIndexed(txnResponse.blockNumber);
-    return { timestamp, txnResponse };
+    const transactionReceipt = await txnResponse.wait();
+    const methodFilter =
+        data.framework.cfaV1.contract.filters.FlowOperatorUpdated();
+    const methodSignature = methodFilter?.topics?.pop();
+    const transactionLog = transactionReceipt.logs.find(
+        (log) => log.topics[0] === methodSignature
+    );
+    return { timestamp, txnResponse, logIndex: transactionLog?.logIndex };
 };
 
 export const hasSubscriptionWithUnits = (
@@ -452,3 +464,34 @@ export const clipDepositNumber = (deposit: BigNumber, roundingDown = false) => {
         : 1;
     return deposit.shr(32).add(toBN(rounding)).shl(32);
 };
+
+export const getOrder = (blockNumber?: number, logIndex?: number) => {
+    return blockNumber! * ORDER_MULTIPLIER + logIndex!;
+};
+
+export function calculateMaybeCriticalAtTimestamp(
+    updatedAtTimestamp: string,
+    balanceUntilUpdatedAt: string,
+    totalNetFlowRate: string
+) {
+    // When the flow rate is not negative then there's no way to have a critical balance timestamp anymore.
+    if (toBN(totalNetFlowRate).gte(toBN("0"))) return null;
+    // When there's no balance then that either means:
+    // 1. account is already critical, and we keep the existing timestamp when the liquidations supposedly started
+    // 2. it's a new account without a critical balance timestamp to begin with
+    if (toBN(balanceUntilUpdatedAt).lte(toBN("0"))) {
+        throw new Error(
+            "This will never gonna hit `Already critical` case because can't simulate realistic liquidation"
+        ); //https://github.com/superfluid-finance/protocol-monorepo/pull/885
+    }
+    const secondsUntilCritical = toBN(balanceUntilUpdatedAt).div(
+        toBN(totalNetFlowRate).abs()
+    );
+    const calculatedCriticalTimestamp = secondsUntilCritical.add(
+        toBN(updatedAtTimestamp)
+    );
+    if (calculatedCriticalTimestamp.gt(MAX_SAFE_SECONDS)) {
+        return MAX_SAFE_SECONDS.toString();
+    }
+    return calculatedCriticalTimestamp.toString();
+}

@@ -1,6 +1,7 @@
-<h1 align="center">sdk-core</h1>
+<h1 align="center">Welcome to @superfluid-finance/sdk-core 👋
+</h1>
 <div align="center">
-<img  width="300" padding="0 0 10px" alt="Superfluid logo" src="./sf-logo.png" />
+<img  width="300" padding="0 0 10px" alt="Superfluid logo" src="https://github.com/superfluid-finance/protocol-monorepo/raw/dev/sf-logo.png" />
 <p>
   <a href="https://www.npmjs.com/package/@superfluid-finance/sdk-core" target="_blank">
     <img alt="Version" src="https://img.shields.io/npm/v/@superfluid-finance/sdk-core.svg">
@@ -33,7 +34,7 @@ Under the hood, SDK-Core leverages TypeScript, ethers.js and The Graph and Graph
 SDK-Core is in early active development and can have breaking releases without warning and without consideration for semantic versioning.
 
 # Features
-* Minimal Framework initialization (`networkName` or `chainId` and `provider`)
+* Minimal Framework initialization (`chainId` and `provider`)
 * New Operation syntax for transactions
 * Create/Update/Delete Agreement Operations (Constant Flow Agreement and Instant Distribution Agreement)
 * SuperToken Operations
@@ -48,6 +49,13 @@ SDK-Core is in early active development and can have breaking releases without w
 * GraphQL
 
 # Prerequisites
+
+> NOTE: You need to have graphql and ethers installed as a dependency in order to use SDK-Core:
+
+```bash
+yarn install graphql ethers
+```
+
 
 To get the package up and running you'll need to install the necessary dependencies and build the project:
 
