@@ -1,11 +1,13 @@
+import {
+    IInstantDistributionAgreementV1,
+    IInstantDistributionAgreementV1__factory,
+} from "@superfluid-finance/ethereum-contracts/build/typechain";
 import { ethers } from "ethers";
 
 import Host from "./Host";
 import Operation from "./Operation";
 import { SFError } from "./SFError";
-import IInstantDistributionAgreementV1ABI from "./abi/IInstantDistributionAgreementV1.json";
 import {
-    IAgreementV1Options,
     IApproveSubscriptionParams,
     IClaimParams,
     ICreateIndexParams,
@@ -19,28 +21,23 @@ import {
     IWeb3Index,
     IWeb3Subscription,
 } from "./interfaces";
-import { IInstantDistributionAgreementV1 } from "./typechain";
 import { normalizeAddress } from "./utils";
 
-const idaInterface = new ethers.utils.Interface(
-    IInstantDistributionAgreementV1ABI.abi
-);
+const idaInterface = IInstantDistributionAgreementV1__factory.createInterface();
 
 /**
  * Instant Distribution Agreement V1 Helper Class
  * @description A helper class to interact with the IDAV1 contract.
  */
 export default class InstantDistributionAgreementV1 {
-    readonly options: IAgreementV1Options;
     readonly host: Host;
     readonly contract: IInstantDistributionAgreementV1;
 
-    constructor(options: IAgreementV1Options) {
-        this.options = options;
-        this.host = new Host(options.config.hostAddress);
+    constructor(hostAddress: string, idaV1Address: string) {
+        this.host = new Host(hostAddress);
         this.contract = new ethers.Contract(
-            this.options.config.idaV1Address,
-            IInstantDistributionAgreementV1ABI.abi
+            idaV1Address,
+            IInstantDistributionAgreementV1__factory.abi
         ) as IInstantDistributionAgreementV1;
     }
 
@@ -81,8 +78,8 @@ export default class InstantDistributionAgreementV1 {
         } catch (err) {
             throw new SFError({
                 type: "IDAV1_READ",
-                customMessage: "There was an error getting the subscription",
-                errorObject: err,
+                message: "There was an error getting the subscription",
+                cause: err,
             });
         }
     };
@@ -111,8 +108,8 @@ export default class InstantDistributionAgreementV1 {
         } catch (err) {
             throw new SFError({
                 type: "IDAV1_READ",
-                customMessage: "There was an error getting the index",
-                errorObject: err,
+                message: "There was an error getting the index",
+                cause: err,
             });
         }
     };
@@ -135,8 +132,8 @@ export default class InstantDistributionAgreementV1 {
             "0x",
         ]);
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides
@@ -161,8 +158,8 @@ export default class InstantDistributionAgreementV1 {
             "0x",
         ]);
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides
@@ -188,8 +185,8 @@ export default class InstantDistributionAgreementV1 {
             "0x",
         ]);
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides
@@ -219,8 +216,8 @@ export default class InstantDistributionAgreementV1 {
             "0x",
         ]);
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides
@@ -244,8 +241,8 @@ export default class InstantDistributionAgreementV1 {
             [normalizedToken, normalizedPublisher, params.indexId, "0x"]
         );
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides
@@ -253,7 +250,7 @@ export default class InstantDistributionAgreementV1 {
     };
 
     /**
-     * Revokes a Subscription, so the Subscriber will need to claim tokens when the Publisher distributres.
+     * Revokes a Subscription, so the Subscriber will need to claim tokens when the Publisher distributes.
      * @param indexId The id of the index.
      * @param superToken The superToken of the index.
      * @param subscriber The subscriber address whose subscription you want to revoke.
@@ -271,8 +268,8 @@ export default class InstantDistributionAgreementV1 {
             "0x",
         ]);
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides
@@ -284,7 +281,7 @@ export default class InstantDistributionAgreementV1 {
      * @param indexId The id of the index.
      * @param superToken The superToken of the index.
      * @param subscriber The subscriber address whose subscription you want to delete.
-     * @param publisher The publisher address of the index you are targetting.
+     * @param publisher The publisher address of the index you are targeting.
      * @param userData Extra user data provided.
      * @param overrides ethers overrides object for more control over the transaction sent.
      * @returns {Operation} An instance of Operation which can be executed or batched.
@@ -301,8 +298,8 @@ export default class InstantDistributionAgreementV1 {
             "0x",
         ]);
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides
@@ -314,7 +311,7 @@ export default class InstantDistributionAgreementV1 {
      * @param indexId The id of the index.
      * @param superToken The superToken of the index.
      * @param subscriber The subscriber address whose subscription you want to delete.
-     * @param publisher The publisher address of the index you are targetting.
+     * @param publisher The publisher address of the index you are targeting.
      * @param userData Extra user data provided.
      * @param overrides ethers overrides object for more control over the transaction sent.
      * @returns {Operation} An instance of Operation which can be executed or batched.
@@ -331,8 +328,8 @@ export default class InstantDistributionAgreementV1 {
             "0x",
         ]);
 
-        return this.host.populateCallAgreementTxnAndReturnOperation(
-            this.options.config.idaV1Address,
+        return this.host.callAgreement(
+            this.contract.address,
             callData,
             params.userData,
             params.overrides

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPLv3
-pragma solidity 0.8.13;
+pragma solidity 0.8.16;
 
 import {
     ISuperfluid,
@@ -10,7 +10,6 @@ import {
 } from "../superfluid/Superfluid.sol";
 import { AgreementMock } from "./AgreementMock.sol";
 
-
 contract SuperAppMockAux {
 
     function actionPingAgreement(ISuperfluid host, AgreementMock agreement, uint256 ping, bytes calldata ctx)
@@ -18,11 +17,13 @@ contract SuperAppMockAux {
     {
         host.callAgreementWithContext(
             agreement,
-            abi.encodeWithSelector(
-                AgreementMock.pingMe.selector,
-                address(this), // expectedMsgSender
-                ping,
-                new bytes(0)
+            abi.encodeCall(
+                agreement.pingMe,
+                (
+                    address(this), // expectedMsgSender
+                    ping,
+                    new bytes(0)
+                )
             ),
             new bytes(0), // user data
             ctx);
@@ -32,10 +33,10 @@ contract SuperAppMockAux {
         external
     {
         host.callAppActionWithContext(
-            app,
-            abi.encodeWithSelector(
-                SuperAppMock.actionNoop.selector,
-                new bytes(0)
+            address(app),
+            abi.encodeCall(
+                app.actionNoop,
+                (new bytes(0))
             ),
             ctx);
     }
@@ -49,9 +50,9 @@ contract SuperAppMock is ISuperApp {
 
     constructor(ISuperfluid host, uint256 configWord, bool doubleRegistration) {
         _host = host;
-        _host.registerApp(configWord);
+        _host.registerAppWithKey(configWord, "");
         if (doubleRegistration) {
-            _host.registerApp(configWord);
+            _host.registerAppWithKey(configWord, "");
         }
         _aux = new SuperAppMockAux();
     }
@@ -76,7 +77,7 @@ contract SuperAppMock is ISuperApp {
     function actionNoop(bytes calldata ctx) external requireValidCtx(ctx) returns (bytes memory newCtx) {
         ISuperfluid.Context memory context = ISuperfluid(msg.sender).decodeCtx(ctx);
         emit NoopEvent(
-            context.appLevel,
+            context.appCallbackLevel,
             context.callType,
             context.agreementSelector);
         return ctx;
@@ -90,7 +91,7 @@ contract SuperAppMock is ISuperApp {
         ISuperfluid.Context memory context = ISuperfluid(msg.sender).decodeCtx(ctx);
         assert(context.msgSender == expectedMsgSender);
         emit NoopEvent(
-            context.appLevel,
+            context.appCallbackLevel,
             context.callType,
             context.agreementSelector);
         return ctx;
@@ -116,7 +117,7 @@ contract SuperAppMock is ISuperApp {
 
     function actionCallAppActionWithoutCtx(bytes calldata ctx) external requireValidCtx(ctx) {
         // this should fail, action should call agreement with ctx
-        _host.callAppAction(ISuperApp(address(0)), new bytes(0));
+        _host.callAppAction(address(0), new bytes(0));
     }
 
     function actionAlteringCtx(bytes calldata ctx)
@@ -157,11 +158,13 @@ contract SuperAppMock is ISuperApp {
     {
         (newCtx, ) = _host.callAgreementWithContext(
             agreement,
-            abi.encodeWithSelector(
-                AgreementMock.pingMe.selector,
-                address(this), // expectedMsgSender
-                ping,
-                new bytes(0)
+            abi.encodeCall(
+                agreement.pingMe,
+                (
+                    address(this), // expectedMsgSender
+                    ping,
+                    new bytes(0)
+                )
             ),
             new bytes(0), // user data
             ctx);
@@ -174,10 +177,12 @@ contract SuperAppMock is ISuperApp {
     {
         (newCtx, ) = _host.callAgreementWithContext(
             agreement,
-            abi.encodeWithSelector(
-                AgreementMock.doRevert.selector,
-                reason,
-                new bytes(0)
+            abi.encodeCall(
+                agreement.doRevert,
+                (
+                    reason,
+                    new bytes(0)
+                )
             ),
             new bytes(0), // user data
             ctx);
@@ -189,10 +194,10 @@ contract SuperAppMock is ISuperApp {
         returns (bytes memory newCtx)
     {
         newCtx = _host.callAppActionWithContext(
-            this,
-            abi.encodeWithSelector(
-                SuperAppMock.actionNoop.selector,
-                new bytes(0)
+            address(this),
+            abi.encodeCall(
+                this.actionNoop,
+                (new bytes(0))
             ),
             ctx);
     }
@@ -203,11 +208,13 @@ contract SuperAppMock is ISuperApp {
         returns (bytes memory newCtx)
     {
         newCtx = _host.callAppActionWithContext(
-            this,
-            abi.encodeWithSelector(
-                SuperAppMock.actionRevertWithReason.selector,
-                reason,
-                new bytes(0)
+            address(this),
+            abi.encodeCall(
+                this.actionRevertWithReason,
+                (
+                    reason,
+                    new bytes(0)
+                )
             ),
             ctx);
     }
@@ -219,11 +226,13 @@ contract SuperAppMock is ISuperApp {
     {
         (newCtx, ) = _host.callAgreementWithContext(
             agreement,
-            abi.encodeWithSelector(
-                AgreementMock.pingMe.selector,
-                address(this), // expectedMsgSender
-                42,
-                new bytes(0)
+            abi.encodeCall(
+                agreement.pingMe,
+                (
+                    address(this), // expectedMsgSender
+                    42,
+                    new bytes(0)
+                )
             ),
             new bytes(0), // user data
             abi.encode(42));
@@ -235,13 +244,40 @@ contract SuperAppMock is ISuperApp {
         returns (bytes memory newCtx)
     {
         newCtx = _host.callAppActionWithContext(
-            this,
-            abi.encodeWithSelector(
-                SuperAppMock.actionRevertWithReason.selector,
-                reason,
-                new bytes(0)
+            address(this),
+            abi.encodeCall(
+                this.actionRevertWithReason,
+                (
+                    reason,
+                    new bytes(0)
+                )
             ),
             abi.encode(42));
+    }
+
+    function validCallAppActionOnNonSuperAppWithCtx(
+        address _nonSuperAppContract,
+        bytes calldata callData,
+        bytes calldata ctx
+    ) external requireValidCtx(ctx) returns (bytes memory newCtx) {
+        newCtx = _host.callAppActionWithContext(
+            _nonSuperAppContract,
+            callData,
+            ctx
+        );
+    }
+
+    function invalidCallAppActionOnNonSuperAppWithCtx(
+        address _nonSuperAppContract,
+        bytes calldata callData,
+        bytes calldata ctx
+    ) external requireValidCtx(ctx) returns (bytes memory newCtx) {
+        newCtx = _host.callAppActionWithContext(
+            _nonSuperAppContract,
+            callData,
+            // we tamper with the original ctx passed by host.callAppAction to make it invalid
+            "0x"
+        );
     }
 
     function actionCallBadAction(bytes calldata ctx)
@@ -249,10 +285,10 @@ contract SuperAppMock is ISuperApp {
         requireValidCtx(ctx)
     {
         _host.callAppActionWithContext(
-            this,
-            abi.encodeWithSelector(
-                SuperAppMock.actionAlteringCtx.selector,
-                new bytes(0)
+            address(this),
+            abi.encodeCall(
+                this.actionAlteringCtx,
+                (new bytes(0))
             ),
             ctx);
         assert(false);
@@ -314,7 +350,7 @@ contract SuperAppMock is ISuperApp {
         ISuperfluid.Context memory context = ISuperfluid(msg.sender).decodeCtx(ctx);
         if (_nextCallbackAction.actionType == NextCallbackActionType.Noop) {
             emit NoopEvent(
-                context.appLevel,
+                context.appCallbackLevel,
                 context.callType,
                 context.agreementSelector);
             return ctx;
@@ -449,7 +485,7 @@ contract SuperAppMockReturningEmptyCtx {
 
     constructor(ISuperfluid host) {
         _host = host;
-        _host.registerApp(SuperAppDefinitions.APP_LEVEL_FINAL);
+        _host.registerAppWithKey(SuperAppDefinitions.APP_LEVEL_FINAL, "");
     }
 
     function beforeAgreementCreated(
@@ -510,7 +546,7 @@ contract SuperAppMockReturningInvalidCtx {
 
     constructor(ISuperfluid host) {
         _host = host;
-        _host.registerApp(SuperAppDefinitions.APP_LEVEL_FINAL);
+        _host.registerAppWithKey(SuperAppDefinitions.APP_LEVEL_FINAL, "");
     }
 
     function afterAgreementCreated(
@@ -551,7 +587,7 @@ contract SuperAppMock2ndLevel {
 
     constructor(ISuperfluid host, SuperAppMock app, AgreementMock agreement) {
         _host = host;
-        _host.registerApp(SuperAppDefinitions.APP_LEVEL_SECOND);
+        _host.registerAppWithKey(SuperAppDefinitions.APP_LEVEL_SECOND, "");
         _app = app;
         _agreement = agreement;
     }
@@ -573,24 +609,29 @@ contract SuperAppMock2ndLevel {
     {
         (newCtx, ) = _host.callAgreementWithContext(
             _agreement,
-            abi.encodeWithSelector(
-                AgreementMock.callAppAfterAgreementCreatedCallback.selector,
-                _app,
-                new bytes(0)
+            abi.encodeCall(
+                _agreement.callAppAfterAgreementCreatedCallback,
+                (
+                    _app,
+                    new bytes(0)
+                )
             ),
             new bytes(0), // user data
             ctx);
     }
 }
 
-// The default SuperApp mock that does many tricks
-contract SuperAppMockWithRegistrationkey {
-
-    ISuperfluid private _host;
-
+// An Super App that uses registerAppWithKey
+contract SuperAppMockWithRegistrationKey {
     constructor(ISuperfluid host, uint256 configWord, string memory registrationKey) {
-        _host = host;
-        _host.registerAppWithKey(configWord, registrationKey);
+        host.registerAppWithKey(configWord, registrationKey);
+    }
+}
+
+// An Super App that uses registerAppWithKey
+contract SuperAppMockUsingDeprecatedRegisterApp {
+    constructor(ISuperfluid host, uint256 configWord) {
+        host.registerApp(configWord);
     }
 }
 
