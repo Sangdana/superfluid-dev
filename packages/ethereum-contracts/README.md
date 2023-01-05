@@ -1,7 +1,7 @@
-<h1 align="center">Welcome to @superfluid-finance/ethereum-contracts 👋
+<h1 align="center">Welcome to Superfluid EVM Contracts (v1) 👋
 </h1>
 <div align="center">
-<img  width="300" padding="0 0 10px" alt="Superfluid logo" src="/sf-logo.png" />
+<img  width="300" padding="0 0 10px" alt="Superfluid logo" src="https://github.com/superfluid-finance/protocol-monorepo/raw/dev/sf-logo.png" />
 <p>
   <a href="https://www.npmjs.com/package/@superfluid-finance/ethereum-contracts" target="_blank">
     <img alt="Version" src="https://img.shields.io/npm/v/@superfluid-finance/ethereum-contracts.svg">
@@ -57,9 +57,9 @@ For convenient testing, the package contains deployment scripts which allow you 
 Currently, this requires [web3.js](https://github.com/ChainSafe/web3.js), support for other frameworks is work in progress.
 
 ```js
-const deployFramework = require("@superfluid-finance/ethereum-contracts/scripts/deploy-framework");
-const deployTestToken = require("@superfluid-finance/ethereum-contracts/scripts/deploy-test-token");
-const deploySuperToken = require("@superfluid-finance/ethereum-contracts/scripts/deploy-super-token");
+const deployFramework = require("@superfluid-finance/ethereum-contracts/ops-scripts/deploy-framework");
+const deployTestToken = require("@superfluid-finance/ethereum-contracts/ops-scripts/deploy-test-token");
+const deploySuperToken = require("@superfluid-finance/ethereum-contracts/ops-scripts/deploy-super-token");
 
 contract("My Test", accounts => {
     const [admin, bob, carol, dan] = accounts;
@@ -81,13 +81,13 @@ contract("My Test", accounts => {
             from: admin
         });
     });
-}
+})
 ```
 In order to write concise testing code, we further recommend the use of [`@superfluid-finance/sdk-core`](/packages/sdk-core) not only in your UI code, but also in JS contract tests.
 
 ### Examples
 
-You may also want to check out some example dapps in the [examples folder](https://github.com/superfluid-finance/protocol-monorepo/tree/dev/examples) instead of starting from scratch.
+You may also want to check out some example dapps in the [examples repo](https://github.com/superfluid-finance/super-examples) instead of starting from scratch.
 Clone a project, modify and play!
 
 ### Deploying Superfluid Protocol
@@ -95,7 +95,7 @@ Clone a project, modify and play!
 In the example test code, you have seen how to deploy protocol contracts from JS code.
 In truffle projects, this deploy scripts can also be used on a CLI. E.g. in order to deploy to a local ganache dev chain:
 ```sh
-CREATE_NEW_RESOLVER=1 DISABLE_NATIVE_TRUFFLE=true truffle --network ganache exec "node_modules/@superfluid-finance/ethereum-contracts/scripts/deploy-test-environment.js"
+CREATE_NEW_RESOLVER=1 DISABLE_NATIVE_TRUFFLE=true truffle --network ganache exec "node_modules/@superfluid-finance/ethereum-contracts/ops-scripts/deploy-test-environment.js"
 ```
 
 In order to deploy to another network, set the `network` argument accordingly.
@@ -217,7 +217,7 @@ yarn run-nodemon forge test # use nodemon to run forge test
 ### Troubleshooting
 
 Superfluid requires the [ERC-1820](https://eips.ethereum.org/EIPS/eip-1820) Registry contract to be deployed. That's because [ERC-777](https://eips.ethereum.org/EIPS/eip-777) - the basis for Super Tokens - depends on it.
-If you use the deployment scripts as described above, that will be done automatically. If not, you may want to manually deploy ERC-1820 yourself. You can use `scripts/deploy-erc1820.js` to do so.
+If you use the deployment scripts as described above, that will be done automatically. If not, you may want to manually deploy ERC-1820 yourself. You can use `ops-scripts/deploy-erc1820.js` to do so.
 
 In the [scripts folder](/scripts) you can find several scripts for deploying/configuring/querying protocol contracts.
 

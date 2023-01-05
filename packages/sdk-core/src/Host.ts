@@ -1,8 +1,10 @@
+import {
+    Superfluid,
+    Superfluid__factory,
+} from "@superfluid-finance/ethereum-contracts/build/typechain";
 import { ethers, Overrides } from "ethers";
 
 import Operation from "./Operation";
-import SuperfluidABI from "./abi/Superfluid.json";
-import { Superfluid } from "./typechain";
 
 /**
  * Host Helper Class
@@ -14,7 +16,7 @@ export default class Host {
     constructor(hostAddress: string) {
         this.contract = new ethers.Contract(
             hostAddress,
-            SuperfluidABI.abi
+            Superfluid__factory.abi
         ) as Superfluid;
     }
 
@@ -26,7 +28,7 @@ export default class Host {
      * @param overrides ethers overrides object for more control over the transaction sent.
      * @returns {Operation} an `Operation` class
      */
-    populateCallAgreementTxnAndReturnOperation = (
+    callAgreement = (
         agreementAddress: string,
         callData: string,
         userData: string | undefined,
@@ -39,5 +41,25 @@ export default class Host {
             overrides || {}
         );
         return new Operation(txn, "SUPERFLUID_CALL_AGREEMENT");
+    };
+
+    /**
+     * Creates an Operation of the `callAppAction` function on the host contract.
+     * @param app the address of the Super App you are calling
+     * @param callData the encoded callData for the function
+     * @param overrides ethers overrides object for more control over the transaction sent.
+     * @returns {Operation} an `Operation` class
+     */
+    callAppAction = (
+        app: string,
+        callData: string,
+        overrides?: Overrides & { from?: string | Promise<string> }
+    ): Operation => {
+        const txn = this.contract.populateTransaction.callAppAction(
+            app,
+            callData,
+            overrides || {}
+        );
+        return new Operation(txn, "CALL_APP_ACTION");
     };
 }
