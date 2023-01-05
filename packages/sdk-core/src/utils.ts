@@ -1,6 +1,6 @@
 import { JsonFragment } from "@ethersproject/abi";
 import { HardhatEthersHelpers } from "@nomiclabs/hardhat-ethers/types";
-import { ethers } from "ethers";
+import { BigNumber, ethers } from "ethers";
 import Web3 from "web3";
 
 import { SFError } from "./SFError";
@@ -28,7 +28,7 @@ export const normalizeAddress = (address?: string): string => {
     if (ethers.utils.isAddress(address) === false) {
         throw new SFError({
             type: "INVALID_ADDRESS",
-            customMessage:
+            message:
                 "The address you have entered is not a valid ethereum address",
         });
     }
@@ -52,8 +52,12 @@ export const isNullOrEmpty = (str: string | null | undefined) => {
     return str == null || str === "";
 };
 
+export function toBN(num: any) {
+    return ethers.BigNumber.from(num);
+}
+
 /**
- * Removes the 8-character signature hash from `callData`.
+ * Removes the 8-character (4 byte) signature hash from `callData`.
  * @param callData
  * @returns function parameters
  */
@@ -154,10 +158,9 @@ export const flowedAmountSinceUpdatedAt = ({
     currentTimestamp: string;
     updatedAtTimestamp: string;
 }) => {
-    return (
-        (Number(currentTimestamp) - Number(updatedAtTimestamp)) *
-        Number(netFlowRate)
-    );
+    return toBN(currentTimestamp)
+        .sub(toBN(updatedAtTimestamp))
+        .mul(toBN(netFlowRate));
 };
 
 /**
@@ -170,10 +173,14 @@ export const subscriptionTotalAmountDistributedSinceUpdated = (
 ) => {
     return indexSubscriptions.reduce(
         (x, y) =>
-            x +
-            (Number(y.index.indexValue) - Number(y.indexValueUntilUpdatedAt)) *
-                Number(y.units),
-        0
+            toBN(x)
+                .add(
+                    toBN(y.index.indexValue).sub(
+                        toBN(y.indexValueUntilUpdatedAt)
+                    )
+                )
+                .mul(toBN(y.units)),
+        toBN(0)
     );
 };
 
@@ -189,11 +196,14 @@ export const subscriptionTotalAmountReceivedSinceUpdated = (
         .filter((x) => x.approved)
         .reduce(
             (x, y) =>
-                x +
-                (Number(y.index.indexValue) -
-                    Number(y.indexValueUntilUpdatedAt)) *
-                    Number(y.units),
-            0
+                toBN(x)
+                    .add(
+                        toBN(y.index.indexValue).sub(
+                            toBN(y.indexValueUntilUpdatedAt)
+                        )
+                    )
+                    .mul(toBN(y.units)),
+            toBN(0)
         );
 };
 
@@ -205,10 +215,9 @@ export const subscriptionTotalAmountReceivedSinceUpdated = (
 export const subscriptionTotalAmountClaimableSinceUpdatedAt = (
     indexSubscriptions: IIndexSubscription[]
 ) => {
-    return (
-        subscriptionTotalAmountDistributedSinceUpdated(indexSubscriptions) -
-        subscriptionTotalAmountReceivedSinceUpdated(indexSubscriptions)
-    );
+    return subscriptionTotalAmountDistributedSinceUpdated(
+        indexSubscriptions
+    ).sub(subscriptionTotalAmountReceivedSinceUpdated(indexSubscriptions));
 };
 
 export const getStringCurrentTimeInSeconds = () =>
@@ -225,7 +234,7 @@ export const getSanitizedTimestamp = (timestamp: ethers.BigNumberish) =>
  * @param updatedAtTimestamp the updated at timestamp of the `AccountTokenSnapshot` entity
  * @returns the balance since the updated at timestamp
  */
-export const getBalance = ({
+export const calculateAvailableBalance = ({
     currentBalance,
     netFlowRate,
     currentTimestamp,
@@ -238,15 +247,15 @@ export const getBalance = ({
     updatedAtTimestamp: string;
     indexSubscriptions: IIndexSubscription[];
 }) => {
-    return (
-        Number(currentBalance) +
-        flowedAmountSinceUpdatedAt({
-            netFlowRate,
-            currentTimestamp,
-            updatedAtTimestamp,
-        }) +
-        subscriptionTotalAmountReceivedSinceUpdated(indexSubscriptions)
-    );
+    return toBN(currentBalance)
+        .add(
+            flowedAmountSinceUpdatedAt({
+                netFlowRate,
+                currentTimestamp,
+                updatedAtTimestamp,
+            })
+        )
+        .add(subscriptionTotalAmountReceivedSinceUpdated(indexSubscriptions));
 };
 
 // NOTE: This is the only places we are allowed to use explicit any in the
@@ -274,4 +283,20 @@ export const getFlowOperatorId = (sender: string, flowOperator: string) => {
         ["flowOperator", sender, flowOperator]
     );
     return ethers.utils.keccak256(encodedData);
+};
+
+/**
+ * Applies clipping to deposit (based on contracts clipping logic)
+ * @param deposit the deposit to clip
+ * @param roundingDown whether to round up or down
+ * @returns clipped deposit
+ */
+export const clipDepositNumber = (deposit: BigNumber, roundingDown = false) => {
+    // last 32 bits of the deposit (96 bits) is clipped off
+    const rounding = roundingDown
+        ? 0
+        : deposit.and(toBN(0xffffffff)).isZero()
+        ? 0
+        : 1;
+    return deposit.shr(32).add(toBN(rounding)).shl(32);
 };
