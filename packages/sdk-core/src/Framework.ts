@@ -1,5 +1,10 @@
-import { Signer } from "@ethersproject/abstract-signer";
 import { HardhatEthersHelpers } from "@nomiclabs/hardhat-ethers/types";
+import {
+    Resolver,
+    Resolver__factory,
+    Superfluid__factory,
+    SuperfluidLoader__factory,
+} from "@superfluid-finance/ethereum-contracts/build/typechain";
 import { ethers } from "ethers";
 import Web3 from "web3";
 
@@ -8,7 +13,7 @@ import ConstantFlowAgreementV1 from "./ConstantFlowAgreementV1";
 import Governance from "./Governance";
 import Host from "./Host";
 import InstantDistributionAgreementV1 from "./InstantDistributionAgreementV1";
-import Operation from "./Operation";
+import Operation, { OperationType } from "./Operation";
 import Query from "./Query";
 import { SFError } from "./SFError";
 import SuperToken, {
@@ -16,36 +21,25 @@ import SuperToken, {
     PureSuperToken,
     WrapperSuperToken,
 } from "./SuperToken";
-import IResolverABI from "./abi/IResolver.json";
-import SuperfluidLoaderABI from "./abi/SuperfluidLoader.json";
 import { chainIdToResolverDataMap, networkNameToChainIdMap } from "./constants";
 import {
     getNetworkName,
     getSubgraphQueriesEndpoint,
     validateFrameworkConstructorOptions,
 } from "./frameworkHelpers";
-import {
-    IConfig,
-    IContracts,
-    IResolverData,
-    ISignerConstructorOptions,
-} from "./interfaces";
-import { IResolver, SuperfluidLoader } from "./typechain";
-import { DataMode } from "./types";
+import { IConfig, IContracts, ISignerConstructorOptions } from "./interfaces";
 import { isEthersProvider, isInjectedWeb3 } from "./utils";
 
 type SupportedProvider =
     | ethers.providers.Provider
-    | (typeof ethers & HardhatEthersHelpers)
+    | HardhatEthersHelpers
     | Web3;
 
 // TODO: add convenience function of utilizing provider (optional)
 // instead of having to pass it in every single time
 export interface IFrameworkOptions {
-    chainId?: number;
+    chainId: number;
     customSubgraphQueriesEndpoint?: string;
-    dataMode?: DataMode;
-    networkName?: string;
     resolverAddress?: string;
     protocolReleaseVersion?: string;
     provider: SupportedProvider;
@@ -54,7 +48,6 @@ export interface IFrameworkOptions {
 export interface IFrameworkSettings {
     chainId: number;
     customSubgraphQueriesEndpoint: string;
-    dataMode: DataMode;
     networkName: string;
     protocolReleaseVersion: string;
     provider: ethers.providers.Provider;
@@ -83,22 +76,25 @@ export default class Framework {
         this.userInputOptions = options;
         this.settings = settings;
 
-        this.cfaV1 = new ConstantFlowAgreementV1({
-            config: this.settings.config,
-        });
-        this.governance = new Governance(
-            this.settings.config.governanceAddress,
-            this.settings.config.hostAddress
+        this.cfaV1 = new ConstantFlowAgreementV1(
+            settings.config.hostAddress,
+            settings.config.cfaV1Address,
+            settings.config.cfaV1ForwarderAddress
         );
-        this.host = new Host(this.settings.config.hostAddress);
-        this.idaV1 = new InstantDistributionAgreementV1({
-            config: this.settings.config,
-        });
-        this.query = new Query(this.settings);
+        this.governance = new Governance(
+            settings.config.hostAddress,
+            settings.config.governanceAddress
+        );
+        this.host = new Host(settings.config.hostAddress);
+        this.idaV1 = new InstantDistributionAgreementV1(
+            settings.config.hostAddress,
+            settings.config.idaV1Address
+        );
+        this.query = new Query(settings);
         const resolver = new ethers.Contract(
-            this.settings.config.resolverAddress,
-            IResolverABI.abi
-        ) as IResolver;
+            settings.config.resolverAddress,
+            Resolver__factory.abi
+        ) as Resolver;
 
         this.contracts = {
             cfaV1: this.cfaV1.contract,
@@ -113,8 +109,6 @@ export default class Framework {
      * Creates the Framework object based on user provided `options`.
      * @param options.chainId the chainId of your desired network (e.g. 137 = matic)
      * @param options.customSubgraphQueriesEndpoint your custom subgraph endpoint
-     * @param options.dataMode the data mode you'd like the framework to use (SUBGRAPH_ONLY, SUBGRAPH_WEB3, WEB3_ONLY)
-     * @param options.networkName the desired network (e.g. "matic", "rinkeby", etc.)
      * @param options.resolverAddress a custom resolver address (advanced use for testing)
      * @param options.protocolReleaseVersion a custom release version (advanced use for testing)
      * @param options.provider a provider object (injected web3, injected ethers, ethers provider) necessary for initializing the framework
@@ -123,7 +117,6 @@ export default class Framework {
     static create = async (options: IFrameworkOptions) => {
         validateFrameworkConstructorOptions({
             ...options,
-            dataMode: options.dataMode || "SUBGRAPH_ONLY",
             protocolReleaseVersion: options.protocolReleaseVersion || "v1",
         });
 
@@ -132,12 +125,9 @@ export default class Framework {
             options.chainId || networkNameToChainIdMap.get(networkName)!;
         const releaseVersion = options.protocolReleaseVersion || "v1";
 
-        // NOTE: endpoint can be empty in WEB3_ONLY mode
         const customSubgraphQueriesEndpoint =
-            options.dataMode === "WEB3_ONLY"
-                ? ""
-                : options.customSubgraphQueriesEndpoint ||
-                  getSubgraphQueriesEndpoint(options);
+            options.customSubgraphQueriesEndpoint ||
+            getSubgraphQueriesEndpoint(options);
 
         const provider = isEthersProvider(options.provider)
             ? options.provider
@@ -156,7 +146,7 @@ export default class Framework {
         if (network.chainId !== chainId && chainId != null) {
             throw new SFError({
                 type: "NETWORK_MISMATCH",
-                customMessage:
+                message:
                     "Your provider network chainId is: " +
                     network.chainId +
                     " whereas your desired chainId is: " +
@@ -165,63 +155,80 @@ export default class Framework {
         }
 
         try {
-            const resolverData: IResolverData = chainIdToResolverDataMap.get(
-                chainId
-            ) || {
-                subgraphAPIEndpoint: "",
-                resolverAddress: "",
-                networkName: "",
-                nativeTokenSymbol: "",
-            };
+            const networkData = chainIdToResolverDataMap.get(chainId);
             const resolverAddress = options.resolverAddress
                 ? options.resolverAddress
-                : resolverData.resolverAddress;
-            const resolver = new ethers.Contract(
+                : networkData
+                ? networkData.addresses.resolver
+                : ethers.constants.AddressZero;
+            const resolver = Resolver__factory.connect(
                 resolverAddress,
-                IResolverABI.abi,
                 provider
-            ) as IResolver;
-
-            const superfluidLoaderAddress = await resolver.get(
-                "SuperfluidLoader-v1"
             );
-            const superfluidLoader = new ethers.Contract(
-                superfluidLoaderAddress,
-                SuperfluidLoaderABI.abi,
-                provider
-            ) as SuperfluidLoader;
-
-            const framework = await superfluidLoader.loadFramework(
-                releaseVersion
-            );
-            const governanceAddress = await new Host(
-                framework.superfluid
-            ).contract
-                .connect(provider)
-                .getGovernance();
-
-            const settings: IFrameworkSettings = {
+            const baseSettings = {
                 chainId,
                 customSubgraphQueriesEndpoint,
-                dataMode: options.dataMode || "SUBGRAPH_ONLY",
                 protocolReleaseVersion: options.protocolReleaseVersion || "v1",
                 provider,
                 networkName,
-                config: {
-                    resolverAddress,
-                    hostAddress: framework.superfluid,
-                    cfaV1Address: framework.agreementCFAv1,
-                    idaV1Address: framework.agreementIDAv1,
-                    governanceAddress,
-                },
             };
 
-            return new Framework(options, settings);
+            // supported networks scenario
+            if (networkData != null) {
+                const settings: IFrameworkSettings = {
+                    ...baseSettings,
+                    config: {
+                        resolverAddress,
+                        hostAddress: networkData.addresses.host,
+                        cfaV1Address: networkData.addresses.cfaV1,
+                        idaV1Address: networkData.addresses.idaV1,
+                        governanceAddress: networkData.addresses.governance,
+                        cfaV1ForwarderAddress:
+                            networkData.addresses.cfaV1Forwarder,
+                    },
+                };
+
+                return new Framework(options, settings);
+            } else {
+                // unsupported networks scenario (e.g. local testing)
+                const superfluidLoaderAddress = await resolver.get(
+                    "SuperfluidLoader-v1"
+                );
+                const cfaV1ForwarderAddress = await resolver.get(
+                    "CFAv1Forwarder"
+                );
+                const superfluidLoader = SuperfluidLoader__factory.connect(
+                    superfluidLoaderAddress,
+                    provider
+                );
+
+                const framework = await superfluidLoader.loadFramework(
+                    releaseVersion
+                );
+                const governanceAddress = await Superfluid__factory.connect(
+                    framework.superfluid,
+                    provider
+                ).getGovernance();
+
+                const settings: IFrameworkSettings = {
+                    ...baseSettings,
+                    config: {
+                        resolverAddress,
+                        hostAddress: framework.superfluid,
+                        cfaV1Address: framework.agreementCFAv1,
+                        idaV1Address: framework.agreementIDAv1,
+                        governanceAddress,
+                        cfaV1ForwarderAddress,
+                    },
+                };
+
+                return new Framework(options, settings);
+            }
         } catch (err) {
             throw new SFError({
                 type: "FRAMEWORK_INITIALIZATION",
-                customMessage: "There was an error initializing the framework",
-                errorObject: err,
+                message: "There was an error initializing the framework",
+                cause: err,
             });
         }
     };
@@ -234,7 +241,7 @@ export default class Framework {
      * @param options.signer a signer object (e.g. ethers.Wallet instance)
      * @returns `ethers.Signer` object
      */
-    createSigner = (options: ISignerConstructorOptions): Signer => {
+    createSigner = (options: ISignerConstructorOptions): ethers.Signer => {
         if (
             !options.privateKey &&
             !options.provider &&
@@ -243,8 +250,7 @@ export default class Framework {
         ) {
             throw new SFError({
                 type: "CREATE_SIGNER",
-                customMessage:
-                    "You must pass in a private key, provider or signer.",
+                message: "You must pass in a private key, provider or signer.",
             });
         }
 
@@ -253,7 +259,7 @@ export default class Framework {
             if (!options.provider) {
                 throw new SFError({
                     type: "CREATE_SIGNER",
-                    customMessage:
+                    message:
                         "You must pass in a provider with your private key.",
                 });
             }
@@ -269,7 +275,7 @@ export default class Framework {
         /* istanbul ignore next */
         throw new SFError({
             type: "CREATE_SIGNER",
-            customMessage: "Something went wrong, this should never occur.",
+            message: "Something went wrong, this should never occur.",
         });
     };
 
@@ -283,6 +289,19 @@ export default class Framework {
             operations,
             hostAddress: this.settings.config.hostAddress,
         });
+    };
+
+    /**
+     * Create an `Operation` class from the `Framework`.
+     * @param txn the populated transaction to execute
+     * @param type the operation type
+     * @returns `Operation` class
+     */
+    operation = (
+        txn: Promise<ethers.PopulatedTransaction>,
+        type: OperationType
+    ) => {
+        return new Operation(txn, type);
     };
 
     /**
@@ -301,7 +320,7 @@ export default class Framework {
         if (!isNativeAssetSuperToken) {
             throw new SFError({
                 type: "SUPERTOKEN_INITIALIZATION",
-                customMessage: "The token is not a native asset supertoken.",
+                message: "The token is not a native asset supertoken.",
             });
         }
         return superToken as NativeAssetSuperToken;
@@ -323,7 +342,7 @@ export default class Framework {
         if (!isPureSuperToken) {
             throw new SFError({
                 type: "SUPERTOKEN_INITIALIZATION",
-                customMessage: "The token is not a pure supertoken.",
+                message: "The token is not a pure supertoken.",
             });
         }
         return superToken as PureSuperToken;
@@ -344,7 +363,7 @@ export default class Framework {
         if (!isWrapperSuperToken) {
             throw new SFError({
                 type: "SUPERTOKEN_INITIALIZATION",
-                customMessage: "The token is not a wrapper supertoken.",
+                message: "The token is not a wrapper supertoken.",
             });
         }
         return superToken as WrapperSuperToken;
@@ -386,20 +405,19 @@ export default class Framework {
                     "." +
                     tokenAddressOrSymbol;
 
-                const resolver = new ethers.Contract(
+                const resolver = Resolver__factory.connect(
                     this.settings.config.resolverAddress,
-                    IResolverABI.abi,
                     this.settings.provider
-                ) as IResolver;
+                );
                 return await resolver.get(superTokenKey);
             } catch (err) {
                 throw new SFError({
                     type: "SUPERTOKEN_INITIALIZATION",
-                    customMessage:
+                    message:
                         "There was an error with loading the SuperToken with symbol: " +
                         tokenAddressOrSymbol +
                         " with the resolver.",
-                    errorObject: err,
+                    cause: err,
                 });
             }
         }

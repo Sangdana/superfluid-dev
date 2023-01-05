@@ -8,9 +8,10 @@ import {
     SuperTokenCreatedEvent,
     SuperTokenLogicCreatedEvent,
 } from "../../generated/schema";
-import { createEventID, tokenHasValidHost } from "../utils";
+import { createEventID, getOrder, tokenHasValidHost } from "../utils";
 import { getOrInitSuperToken } from "../mappingHelpers";
 import { getHostAddress } from "../addresses";
+import { ethereum } from "@graphprotocol/graph-ts";
 
 export function handleSuperTokenCreated(event: SuperTokenCreated): void {
     let hostAddress = getHostAddress();
@@ -22,11 +23,16 @@ export function handleSuperTokenCreated(event: SuperTokenCreated): void {
     let ev = new SuperTokenCreatedEvent(
         createEventID("SuperTokenCreated", event)
     );
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "SuperTokenCreated";
     ev.addresses = [event.params.token];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.token = event.params.token;
     ev.save();
 
@@ -45,11 +51,16 @@ export function handleCustomSuperTokenCreated(
     let ev = new CustomSuperTokenCreatedEvent(
         createEventID("CustomSuperTokenCreated", event)
     );
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "CustomSuperTokenCreated";
     ev.addresses = [event.params.token];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.token = event.params.token;
     ev.save();
 
@@ -68,11 +79,16 @@ export function handleSuperTokenLogicCreated(
     let ev = new SuperTokenLogicCreatedEvent(
         createEventID("SuperTokenLogicCreated", event)
     );
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "SuperTokenLogicCreated";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.tokenLogic = event.params.tokenLogic;
     ev.save();
 }

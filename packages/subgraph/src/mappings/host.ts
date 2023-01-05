@@ -17,22 +17,35 @@ import {
     SuperTokenFactoryUpdated,
     SuperTokenLogicUpdated,
 } from "../../generated/Host/ISuperfluid";
-import { createEventID } from "../utils";
+import { createEventID, getOrder } from "../utils";
 import { commitHash, configuration, branch } from "../meta.ignore";
 import { ethereum } from "@graphprotocol/graph-ts";
+import { SuperfluidGovernance } from "../../generated/templates";
 
 export function handleGovernanceReplaced(event: GovernanceReplaced): void {
     let ev = new GovernanceReplacedEvent(
         createEventID("GovernanceReplaced", event)
     );
+
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "GovernanceReplaced";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.oldGovernance = event.params.oldGov;
     ev.newGovernance = event.params.newGov;
+    ev.logIndex = event.logIndex;
     ev.save();
+
+    // Create data source template for new Governance contract
+    // and start indexing events
+    // @note The subgraph will not capture governance events
+    // which occur prior to this event being emitted
+    SuperfluidGovernance.create(event.params.newGov);
 }
 
 export function handleAgreementClassRegistered(
@@ -41,11 +54,17 @@ export function handleAgreementClassRegistered(
     let ev = new AgreementClassRegisteredEvent(
         createEventID("AgreementClassRegistered", event)
     );
+
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "AgreementClassRegistered";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.agreementType = event.params.agreementType;
     ev.code = event.params.code;
     ev.save();
@@ -59,11 +78,17 @@ export function handleAgreementClassUpdated(
     let ev = new AgreementClassUpdatedEvent(
         createEventID("AgreementClassUpdated", event)
     );
+
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "AgreementClassUpdated";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.agreementType = event.params.agreementType;
     ev.code = event.params.code;
     ev.save();
@@ -78,11 +103,17 @@ export function handleSuperTokenFactoryUpdated(
     let ev = new SuperTokenFactoryUpdatedEvent(
         createEventID("SuperTokenFactoryUpdated", event)
     );
+
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "SuperTokenFactoryUpdated";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.newFactory = event.params.newFactory;
     ev.save();
 }
@@ -93,11 +124,17 @@ export function handleSuperTokenLogicUpdated(
     let ev = new SuperTokenLogicUpdatedEvent(
         createEventID("SuperTokenLogicUpdated", event)
     );
+
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "SuperTokenLogicUpdated";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.token = event.params.token;
     ev.code = event.params.code;
     ev.save();
@@ -105,22 +142,32 @@ export function handleSuperTokenLogicUpdated(
 
 export function handleAppRegistered(event: AppRegistered): void {
     let ev = new AppRegisteredEvent(createEventID("AppRegistered", event));
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "AppRegistered";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.app = event.params.app;
     ev.save();
 }
 
 export function handleJail(event: Jail): void {
     let ev = new JailEvent(createEventID("Jail", event));
+    let receipt = event.receipt as ethereum.TransactionReceipt;
     ev.transactionHash = event.transaction.hash;
+    ev.gasPrice = event.transaction.gasPrice;
+    ev.gasUsed = receipt.gasUsed;
     ev.timestamp = event.block.timestamp;
     ev.name = "Jail";
     ev.addresses = [];
     ev.blockNumber = event.block.number;
+    ev.logIndex = event.logIndex;
+    ev.order = getOrder(event.block.number, event.logIndex);
     ev.app = event.params.app;
     ev.reason = event.params.reason;
     ev.save();

@@ -1,10 +1,12 @@
+import {
+    ERC20WithTokenInfo,
+    ERC20WithTokenInfo__factory,
+} from "@superfluid-finance/ethereum-contracts/build/typechain";
 import { ethers } from "ethers";
 
 import Operation from "./Operation";
 import { SFError } from "./SFError";
-import ERC20WithTokenInfoABI from "./abi/ERC20WithTokenInfo.json";
 import { IBaseSuperTokenParams, ITransferFromParams } from "./interfaces";
-import { ERC20WithTokenInfo } from "./typechain/ERC20WithTokenInfo";
 import { normalizeAddress } from "./utils";
 
 export default class ERC20Token {
@@ -13,9 +15,10 @@ export default class ERC20Token {
 
     constructor(address: string) {
         this.address = address;
+
         this.contract = new ethers.Contract(
-            this.address,
-            ERC20WithTokenInfoABI.abi
+            address,
+            ERC20WithTokenInfo__factory.abi
         ) as ERC20WithTokenInfo;
     }
 
@@ -47,8 +50,8 @@ export default class ERC20Token {
         } catch (err) {
             throw new SFError({
                 type: "SUPERTOKEN_READ",
-                customMessage: "There was an error getting allowance",
-                errorObject: err,
+                message: "There was an error getting allowance",
+                cause: err,
             });
         }
     };
@@ -75,8 +78,8 @@ export default class ERC20Token {
         } catch (err) {
             throw new SFError({
                 type: "SUPERTOKEN_READ",
-                customMessage: "There was an error getting balanceOf",
-                errorObject: err,
+                message: "There was an error getting balanceOf",
+                cause: err,
             });
         }
     };
@@ -97,8 +100,8 @@ export default class ERC20Token {
         } catch (err) {
             throw new SFError({
                 type: "SUPERTOKEN_READ",
-                customMessage: "There was an error getting name",
-                errorObject: err,
+                message: "There was an error getting name",
+                cause: err,
             });
         }
     };
@@ -121,8 +124,8 @@ export default class ERC20Token {
         } catch (err) {
             throw new SFError({
                 type: "SUPERTOKEN_READ",
-                customMessage: "There was an error getting symbol",
-                errorObject: err,
+                message: "There was an error getting symbol",
+                cause: err,
             });
         }
     };
@@ -145,8 +148,8 @@ export default class ERC20Token {
         } catch (err) {
             throw new SFError({
                 type: "SUPERTOKEN_READ",
-                customMessage: "There was an error getting totalSupply",
-                errorObject: err,
+                message: "There was an error getting totalSupply",
+                cause: err,
             });
         }
     };
