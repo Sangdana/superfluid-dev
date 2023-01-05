@@ -11,21 +11,17 @@ on:
         type: boolean
 
 jobs:
+  checkout-and-install:
+    name: Checkout repo and install dependencies
+    uses: ./.github/workflows/call.checkout-and-install-lockfile.yml
+
   subgraph-unit-tests:
     name: Run subgraph unit tests
     runs-on: ubuntu-latest
+    needs: [checkout-and-install]
     
     steps:
       - uses: actions/checkout@v3
-
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: "yarn"
-
-      - name: "Install dependencies"
-        run: yarn install --frozen-lockfile
 
       - name: "Build contracts"
         run: yarn build
@@ -37,8 +33,8 @@ jobs:
 
   subgraph-end-to-end-integration:
     name: Run subgraph integration tests
-
     runs-on: ubuntu-latest
+    needs: [checkout-and-install]
 
     env:
       subgraph-working-directory: ./packages/subgraph
@@ -46,15 +42,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: "yarn"
-
-      - name: "Install dependencies"
-        run: yarn install --frozen-lockfile
 
       - name: "Build contracts"
         run: yarn build
